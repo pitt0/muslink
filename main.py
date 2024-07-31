@@ -1,6 +1,7 @@
 import asyncio
 import json
 import sys
+from typing import Generator
 
 from dotenv import load_dotenv
 from spotipy import Spotify, SpotifyOAuth
@@ -21,12 +22,7 @@ def get_spotify_playlist_songs(playlist_id: str) -> list[str]:
     out = []
     for track in tracks:
         track = track["track"]
-        try:
-            artists = ", ".join(artist["name"] for artist in track["artists"])
-        except KeyError:
-            with open("data/songs/spotify1.json", "w") as f:
-                json.dump(track, f, indent=4)
-            continue
+        artists = ", ".join(artist["name"] for artist in track["artists"])
         # since python 3.12 you can include double quotes inside f-strings
         # if you are to use an older version of python just use
         # f"{track['name']} {artists}"
@@ -46,6 +42,58 @@ def get_ytm_playlist_songs(playlist_id: str) -> list[str]:
     return out
 
 
+def get_del_songs(latest: list[str], cache: list[str]) -> Generator[str, None, None]:
+    for song in cache:
+        if song not in latest:
+            yield song
+
+
+def get_new_songs(latest: list[str], cache: list[str]) -> Generator[str, None, None]:
+    for song in latest:
+        if song not in cache:
+            yield song
+
+
+def get_spotify_new(playlist_id: str) -> Generator[str, None, None]:
+    sp_tracks = get_spotify_playlist_songs(playlist_id)
+    with open("cache/spotify.json", "r") as f:
+        sp_cache = json.load(f)
+
+    return get_new_songs(sp_tracks, sp_cache)
+
+
+def get_spotify_del(playlist_id: str) -> Generator[str, None, None]:
+    sp_tracks = get_spotify_playlist_songs(playlist_id)
+    with open("cache/spotify.json", "r") as f:
+        sp_cache = json.load(f)
+
+    return get_del_songs(sp_tracks, sp_cache)
+
+
+def get_youtube_new(playlist_id: str) -> Generator[str, None, None]:
+    yt_tracks = get_ytm_playlist_songs(playlist_id)
+    with open("cache/youtube.json", "r") as f:
+        yt_cache = json.load(f)
+
+    return get_new_songs(yt_tracks, yt_cache)
+
+
+def get_youtube_del(playlist_id: str) -> Generator[str, None, None]:
+    yt_tracks = get_ytm_playlist_songs(playlist_id)
+    with open("cache/youtube.json", "r") as f:
+        yt_cache = json.load(f)
+
+    return get_del_songs(yt_tracks, yt_cache)
+
+
+def remove_from_cache(cache: str, song: str) -> None:
+    with open(f"cache/{cache}.json", "r") as f:
+        old = json.load(f)
+    old.remove(song)
+    with open(f"cache/{cache}.json", "w") as f:
+        old = json.dump(old, f)
+
+
 async def main() -> None:
 
     sp_p_id = None
@@ -63,29 +111,28 @@ async def main() -> None:
         return
 
     while True:
-        sp_tracks = get_spotify_playlist_songs(sp_p_id)
-        yt_tracks = get_ytm_playlist_songs(yt_p_id)
+        for song in get_spotify_new(sp_p_id):
+            track = ytm.search(query=song, filter="songs", limit=1, ignore_spelling=True)[0]
+            ytm.add_playlist_items(yt_p_id, [track["videoId"]])
 
-        if len(sp_tracks) == len(yt_tracks):
-            # there are the same number of tracks, so we can safely assume (or partially so)
-            # that there has been no change since the last minute
-            continue
+        for song in get_spotify_del(sp_p_id):
+            track = ytm.search(query=song, filter="songs", limit=1, ignore_spelling=True)[0]
+            ytm.remove_playlist_items(yt_p_id, [track["videoId"]])
+            remove_from_cache("spotify", song)
 
-        if len(sp_tracks) > len(yt_tracks):
-            # track goes from last element of sp_tracks to the first element that is not also contained in yt_tracks
-            for track in sp_tracks[-1 : len(yt_tracks) - 1 : -1]:
-                track = ytm.search(query=track, filter="songs", limit=1, ignore_spelling=True)[0]
-                ytm.add_playlist_items(yt_p_id, [track["videoId"]])
+        for song in get_youtube_new(yt_p_id):
+            track = sp.search(song, limit=1)
+            assert track is not None  # mi dava fastidio che pyright mi dava errore
+            sp.playlist_add_items(sp_p_id, items=[track["track"]["id"]])
 
-        else:
-            # track goes from last element of yt_tracks to the first element that is not also contained in sp_tracks
-            for track in yt_tracks[-1 : len(sp_tracks) - 1 : -1]:
-                track = sp.search(track, limit=1)
-                assert track is not None  # mi dava fastidio che pyright mi dava errore
-                sp.playlist_add_items(sp_p_id, items=[track["track"]["id"]])
+        for song in get_youtube_del(yt_p_id):
+            track = sp.search(song, limit=1)
+            assert track is not None  # mi dava fastidio che pyright mi dava errore
+            sp.playlist_remove_all_occurrences_of_items(sp_p_id, items=[track["track"]["id"]])
+            remove_from_cache("youtube", song)
 
         # sleep for a minute then repeat the process indefinitely
-        await asyncio.sleep(60)
+        await asyncio.sleep(3600)
 
 
 if __name__ == "__main__":

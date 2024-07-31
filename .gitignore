@@ -2,5 +2,6 @@
 .env
 
 data/
+cache/
 oauth.json
 playlists_ids_cache.json
