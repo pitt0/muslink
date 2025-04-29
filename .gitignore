@@ -1,7 +1,5 @@
 .cache
 .env
+.venv
 
-data/
-cache/
 oauth.json
-playlists_ids_cache.json

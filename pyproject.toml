@@ -1,0 +1,47 @@
+[project]
+name = "playlist-linker"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "dotenv>=0.9.9",
+    "python-dotenv>=1.1.0",
+    "spotipy>=2.25.1",
+    "yt-dlp>=2025.3.31",
+    "ytmusicapi>=1.10.3",
+]
+
+[tool.pyright]
+include = ["./"]
+venvPath = ".venv"
+
+# These are checked by ruff
+reportUndefinedVariable = false
+reportUnusedVariable = false
+reportUnusedImport = false
+
+[tool.ruff]
+line-length = 130
+
+[tool.ruff.lint]
+extend-fixable = ["I", "ANN201"]
+extend-select = ["ALL"]
+ignore = [
+    "ANN",
+    "D1",
+    "E501",
+    "ERA001",
+    "G010",
+    "INP001",
+    "PGH003",
+    "PLR2004",
+    "PLW2901",
+    "PTH123",
+    "S311",
+    "SIM105",
+    "TD",
+    "TID",
+    "UP015",
+    "UP038",
+]
